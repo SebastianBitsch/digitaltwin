@@ -2,6 +2,7 @@ pyyaml
 openai
 langchain
 langchain-community
+langchain-openai
 supervision
 ultralytics
 flask

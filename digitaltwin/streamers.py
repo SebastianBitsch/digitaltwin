@@ -47,10 +47,9 @@ class DirectoryStreamer(Streamer):
         super().__init__()
         if not os.path.isdir(images_dir):
             raise FileNotFoundError(f"Directory for camera not found: {images_dir}")
+        
         image_files = [f for f in os.listdir(images_dir) if f.endswith('.png')]
-        self.image_paths: list[str] = natsorted([
-            os.path.join(images_dir, f) for f in image_files
-        ])
+        self.image_paths: list[str] = natsorted([os.path.join(images_dir, f) for f in image_files])
         self.index = 0
 
     def __iter__(self):
@@ -70,3 +69,34 @@ class DirectoryStreamer(Streamer):
 
         return self.to_bytes(frame)
 
+
+
+class VideoStreamer(Streamer):
+
+    def __init__(self, video_path: str) -> None:
+        super().__init__()
+        if not os.path.isfile(video_path):
+            raise FileNotFoundError(f"Video file not found: {video_path}")
+
+        self.video_path = video_path
+        self.cap = cv2.VideoCapture(video_path)
+
+        if not self.cap.isOpened():
+            raise IOError(f"Failed to open video file: {video_path}")
+
+
+    def __iter__(self):
+        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0) # Rewind to start if needed
+        return self
+
+
+    def __next__(self):
+        success, frame = self.cap.read()
+        if not success:
+            raise StopIteration
+        return self.to_bytes(frame)
+
+
+    def __del__(self):
+        if hasattr(self, 'cap') and self.cap.isOpened():
+            self.cap.release()

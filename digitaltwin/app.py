@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from digitaltwin.streamers import CameraStreamer, DirectoryStreamer
+from digitaltwin.streamers import CameraStreamer, DirectoryStreamer, VideoStreamer
 from digitaltwin.pydantic import QuestionRequest, QuestionResponse, ErrorResponse
 
 
@@ -23,7 +23,8 @@ streams = [
     CameraStreamer(cam_id = 1),
     DirectoryStreamer(images_dir=os.path.join(BASE_IMAGE_DIR, "C1")),
     DirectoryStreamer(images_dir=os.path.join(BASE_IMAGE_DIR, "C2")),
-    DirectoryStreamer(images_dir=os.path.join(BASE_IMAGE_DIR, "C3")),
+    VideoStreamer(video_path = "data/raw/Camera.mp4")
+    # DirectoryStreamer(images_dir=os.path.join(BASE_IMAGE_DIR, "C3")),
 ]
 assert len(streams) <= 4, "Error: for now only 4 streams - dont wanna do dynamic html shit"
 
@@ -75,10 +76,10 @@ app.add_middleware(
 
 
 @app.get("/video/{camera_id}")
-def video(camera_id: int = Path(..., ge=1, le=6)):
+def video(camera_id: int = Path(..., ge=0, le=4)):
     try:
         return StreamingResponse(
-            streams[camera_id - 1],
+            streams[camera_id],
             media_type="multipart/x-mixed-replace; boundary=frame"
         )
     except FileNotFoundError as e:
