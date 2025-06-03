@@ -15,7 +15,8 @@ from ultralytics import YOLO
 
 from digitaltwin.streamers import CameraStreamer, DirectoryStreamer, VideoStreamer, YOLOStreamer
 from digitaltwin.pydantic import QuestionRequest, QuestionResponse, ErrorResponse
-
+from digitaltwin.utils import to_bytes
+from digitaltwin.database.db_logger import DatabaseLogger
 
 BASE_IMAGE_DIR = "data/processed/Wildtrack_dataset/Image_subsets"
 FRAME_INTERVAL = 1.0 / 20.0  # ~20 FPS
@@ -30,6 +31,12 @@ streams = [
     YOLOStreamer(VideoStreamer(video_path = "data/raw/Camera.mp4"), model=model),
     # DirectoryStreamer(images_dir=os.path.join(BASE_IMAGE_DIR, "C3")),
 ]
+
+logger = DatabaseLogger("data/tracking.db")
+
+for s in streams:
+    s.add_listener(logger)
+
 assert len(streams) <= 4, "Error: for now only 4 streams - dont wanna do dynamic html shit"
 
 
@@ -86,7 +93,7 @@ def video(camera_id: int = Path(..., ge=0, le=4)):
     
     try:
         return StreamingResponse(
-            streams[camera_id],
+            to_bytes(streams[camera_id]),
             media_type="multipart/x-mixed-replace; boundary=frame"
         )
     except FileNotFoundError as e:

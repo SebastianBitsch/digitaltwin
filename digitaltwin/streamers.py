@@ -1,8 +1,11 @@
 import os
+from datetime import datetime
 from abc import ABC, abstractmethod
 
 import cv2
 from natsort import natsorted
+
+from digitaltwin.database.db_logger import EventListener, DetectionEvent
 
 
 class Streamer(ABC):
@@ -15,12 +18,6 @@ class Streamer(ABC):
     def __next__(self):
         pass
 
-    def to_bytes(self, frame):
-        _, buffer = cv2.imencode('.jpg', frame)
-        return (
-            b'--frame\r\n'
-            b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n'
-        )
 
 class CameraStreamer(Streamer):
     
@@ -35,7 +32,7 @@ class CameraStreamer(Streamer):
     def __next__(self):
         success, frame = self.cap.read()
         if success:
-            return self.to_bytes(frame)
+            return frame
 
         else:
             raise StopIteration
@@ -67,7 +64,7 @@ class DirectoryStreamer(Streamer):
         if frame is None:
             return self.__next__()  # Skip unreadable frame
 
-        return self.to_bytes(frame)
+        return frame
 
 
 
@@ -94,7 +91,7 @@ class VideoStreamer(Streamer):
         success, frame = self.cap.read()
         if not success:
             raise StopIteration
-        return self.to_bytes(frame)
+        return frame
 
 
     def __del__(self):
@@ -102,33 +99,52 @@ class VideoStreamer(Streamer):
             self.cap.release()
 
 
-from ultralytics import YOLO
-import numpy as np
-
 class YOLOStreamer(Streamer):
     def __init__(self, base_streamer: Streamer, model, conf: float = 0.3, tracker: str = "botsort.yaml"):
         self.base_streamer = base_streamer
         self.model = model
         self.conf = conf
         self.tracker = tracker
+        self.listeners: list[EventListener] = []
+        self.frame_idx = 0
+
+
+    def add_listener(self, listener: EventListener):
+        self.listeners.append(listener)
+
+
+    def notify_listeners(self, event: DetectionEvent):
+        for listener in self.listeners:
+            listener.handle_detection(event)
+
 
     def __iter__(self):
-        self.stream_iter = iter(self.base_streamer)
+        self.frame_iter = iter(self.base_streamer)
+        self.frame_idx = 0
         return self
 
     def __next__(self):
-        # Get next raw frame from base_streamer (as jpeg-encoded bytes)
-        frame_bytes = next(self.stream_iter)  # May raise StopIteration
+        frame = next(self.frame_iter)
 
-        # Decode JPEG bytes back into numpy image
-        jpeg_bytes = frame_bytes.split(b'\r\n\r\n', 1)[1].rsplit(b'\r\n', 1)[0]
-        nparr = np.frombuffer(jpeg_bytes, np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-        # Run YOLOv8 tracking
+        ts = datetime.now()
         results = self.model.track(frame, conf=self.conf, tracker=self.tracker, persist=False, stream=False, verbose=False)
 
-        # Get the annotated image from the results
+        # Get annotated image from the results
         annotated_frame = results[0].plot()
 
-        return self.base_streamer.to_bytes(annotated_frame)
+        if results[0].boxes.id is not None:
+            for box, track_id in zip(results[0].boxes.xyxy, results[0].boxes.id):
+                x1, y1, x2, y2 = box.tolist()
+                cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
+
+                event = DetectionEvent(
+                    frame_index=self.frame_idx,
+                    timestamp=ts,
+                    track_id=int(track_id),
+                    x=cx,
+                    y=cy
+                )
+                self.notify_listeners(event)
+
+        self.frame_idx += 1
+        return annotated_frame
