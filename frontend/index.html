@@ -1,0 +1,30 @@
+<!-- index.html -->
+<html>
+<head><title>Camera Twin + Chat</title></head>
+<body>
+    <h2>Live Video Stream</h2>
+    <img src="http://localhost:8000/video" width="640"/>
+
+    <h2>Ask Me Anything</h2>
+    <input id="msg" type="text" placeholder="e.g., Who was in Zone A today?" />
+    <button onclick="sendMsg()">Send</button>
+    <p id="response"></p>
+
+    <script>
+        async function sendMsg() {
+          const msg = document.getElementById("msg").value;
+          const res = await fetch("/ask", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ question: msg })
+          });
+      
+          const data = await res.json();
+          document.getElementById("response").innerText = data.answer || data.error;
+        }
+      </script>
+      
+    </body>
+</html>

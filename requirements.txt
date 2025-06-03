@@ -1,1 +1,7 @@
 pyyaml
+openai
+langchain
+langchain-community
+supervision
+ultralytics
+flask
