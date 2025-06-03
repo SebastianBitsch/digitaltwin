@@ -68,7 +68,7 @@ def gen_frames():
 app.mount("/static", StaticFiles(directory="frontend", html=True), name="static")
 
 
-@app.get("/video")
+@app.get("/video/1")
 def video():
     return StreamingResponse(gen_frames(), media_type="multipart/x-mixed-replace; boundary=frame")
 

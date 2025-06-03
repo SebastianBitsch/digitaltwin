@@ -1,30 +1,144 @@
 <!-- index.html -->
 <html>
-<head><title>Camera Twin + Chat</title></head>
+<head>
+<title>Camera Twin + Chat</title>
+<style>
+body {
+  margin: 0;
+  padding: 20px;
+  font-family: Arial, sans-serif;
+}
+
+.main-container {
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 20px;
+  height: 100vh;
+}
+
+.chat-panel {
+  background: #f5f5f5;
+  padding: 20px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.video-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  flex: 1;
+}
+
+.stream {
+  width: 100%;
+  height: auto;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  aspect-ratio: 16/9;
+  object-fit: cover;
+  background: #eee;
+}
+
+.chat-input-area {
+  margin-top: 10px;
+}
+
+#msg {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+}
+
+button {
+  width: 100%;
+  padding: 10px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #0056b3;
+}
+
+#response {
+  margin-top: 15px;
+  padding: 10px;
+  background: white;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  min-height: 100px;
+  white-space: pre-wrap;
+  overflow-y: auto;
+}
+
+h2 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  color: #333;
+}
+</style>
+</head>
 <body>
-    <h2>Live Video Stream</h2>
-    <img src="http://localhost:8000/video" width="640"/>
+<div class="main-container">
+  <div class="chat-panel">
+    <h2>Ask me anything</h2>
+    <div class="chat-input-area">
+      <input id="msg" type="text" placeholder="e.g., Who was in Zone A today?" />
+      <button onclick="sendMsg()">Send</button>
+      <div id="response"></div>
+    </div>
+  </div>
+  
+  <div class="video-section">
+    <h2>Live Video Streams</h2>
+    <div class="grid">
+      <img class="stream" src="/video/1" alt="Camera 1" />
+      <img class="stream" src="/video/2" alt="Camera 2" />
+      <img class="stream" src="/video/3" alt="Camera 3" />
+      <img class="stream" src="/video/4" alt="Camera 4" />
+      <img class="stream" src="/video/5" alt="Camera 5" />
+      <img class="stream" src="/video/6" alt="Camera 6" />
+    </div>
+  </div>
+</div>
 
-    <h2>Ask Me Anything</h2>
-    <input id="msg" type="text" placeholder="e.g., Who was in Zone A today?" />
-    <button onclick="sendMsg()">Send</button>
-    <p id="response"></p>
+<script>
+async function sendMsg() {
+  const msg = document.getElementById("msg").value;
+  if (!msg.trim()) return;
+  
+  const res = await fetch("/ask", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ question: msg })
+  });
+  
+  const data = await res.json();
+  document.getElementById("response").innerText = data.answer || data.error;
+  document.getElementById("msg").value = ""; // Clear input after sending
+}
 
-    <script>
-        async function sendMsg() {
-          const msg = document.getElementById("msg").value;
-          const res = await fetch("/ask", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ question: msg })
-          });
-      
-          const data = await res.json();
-          document.getElementById("response").innerText = data.answer || data.error;
-        }
-      </script>
-      
-    </body>
+// Allow Enter key to send message
+document.getElementById("msg").addEventListener("keypress", function(e) {
+  if (e.key === "Enter") {
+    sendMsg();
+  }
+});
+</script>
+</body>
 </html>
