@@ -100,3 +100,35 @@ class VideoStreamer(Streamer):
     def __del__(self):
         if hasattr(self, 'cap') and self.cap.isOpened():
             self.cap.release()
+
+
+from ultralytics import YOLO
+import numpy as np
+
+class YOLOStreamer(Streamer):
+    def __init__(self, base_streamer: Streamer, model, conf: float = 0.3, tracker: str = "botsort.yaml"):
+        self.base_streamer = base_streamer
+        self.model = model
+        self.conf = conf
+        self.tracker = tracker
+
+    def __iter__(self):
+        self.stream_iter = iter(self.base_streamer)
+        return self
+
+    def __next__(self):
+        # Get next raw frame from base_streamer (as jpeg-encoded bytes)
+        frame_bytes = next(self.stream_iter)  # May raise StopIteration
+
+        # Decode JPEG bytes back into numpy image
+        jpeg_bytes = frame_bytes.split(b'\r\n\r\n', 1)[1].rsplit(b'\r\n', 1)[0]
+        nparr = np.frombuffer(jpeg_bytes, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        # Run YOLOv8 tracking
+        results = self.model.track(frame, conf=self.conf, tracker=self.tracker, persist=False, stream=False, verbose=False)
+
+        # Get the annotated image from the results
+        annotated_frame = results[0].plot()
+
+        return self.base_streamer.to_bytes(annotated_frame)

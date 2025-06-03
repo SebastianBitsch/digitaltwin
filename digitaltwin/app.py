@@ -11,19 +11,23 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from digitaltwin.streamers import CameraStreamer, DirectoryStreamer, VideoStreamer
+from ultralytics import YOLO
+
+from digitaltwin.streamers import CameraStreamer, DirectoryStreamer, VideoStreamer, YOLOStreamer
 from digitaltwin.pydantic import QuestionRequest, QuestionResponse, ErrorResponse
 
 
 BASE_IMAGE_DIR = "data/processed/Wildtrack_dataset/Image_subsets"
 FRAME_INTERVAL = 1.0 / 20.0  # ~20 FPS
 
+model = YOLO("models/yolo11n.pt")
+
 # What streams should we use
 streams = [
-    CameraStreamer(cam_id = 1),
-    DirectoryStreamer(images_dir=os.path.join(BASE_IMAGE_DIR, "C1")),
-    DirectoryStreamer(images_dir=os.path.join(BASE_IMAGE_DIR, "C2")),
-    VideoStreamer(video_path = "data/raw/Camera.mp4")
+    YOLOStreamer(CameraStreamer(cam_id = 1), model=model),
+    YOLOStreamer(DirectoryStreamer(images_dir=os.path.join(BASE_IMAGE_DIR, "C1")), model=model),
+    YOLOStreamer(DirectoryStreamer(images_dir=os.path.join(BASE_IMAGE_DIR, "C2")), model=model),
+    YOLOStreamer(VideoStreamer(video_path = "data/raw/Camera.mp4"), model=model),
     # DirectoryStreamer(images_dir=os.path.join(BASE_IMAGE_DIR, "C3")),
 ]
 assert len(streams) <= 4, "Error: for now only 4 streams - dont wanna do dynamic html shit"
@@ -77,6 +81,9 @@ app.add_middleware(
 
 @app.get("/video/{camera_id}")
 def video(camera_id: int = Path(..., ge=0, le=4)):
+    if len(streams) <= camera_id:
+        return
+    
     try:
         return StreamingResponse(
             streams[camera_id],
