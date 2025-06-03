@@ -1,9 +1,5 @@
 import os
-
-import cv2
-from natsort import natsorted
 import uvicorn
-from pydantic import BaseModel
 
 from langchain_openai import ChatOpenAI
 from langchain_community.utilities import SQLDatabase
@@ -15,19 +11,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from digitaltwin.streamers import CameraStreamer, DirectoryStreamer
+from digitaltwin.pydantic import QuestionRequest, QuestionResponse, ErrorResponse
+
 
 BASE_IMAGE_DIR = "data/processed/Wildtrack_dataset/Image_subsets"
 FRAME_INTERVAL = 1.0 / 20.0  # ~20 FPS
 
-# === Pydantic Models ===
-class QuestionRequest(BaseModel):
-    question: str
-
-class QuestionResponse(BaseModel):
-    answer: str
-
-class ErrorResponse(BaseModel):
-    error: str
+# What streams should we use
+streams = [
+    CameraStreamer(cam_id = 1),
+    DirectoryStreamer(images_dir=os.path.join(BASE_IMAGE_DIR, "C1")),
+    DirectoryStreamer(images_dir=os.path.join(BASE_IMAGE_DIR, "C2")),
+    DirectoryStreamer(images_dir=os.path.join(BASE_IMAGE_DIR, "C3")),
+]
+assert len(streams) <= 4, "Error: for now only 4 streams - dont wanna do dynamic html shit"
 
 
 # === Connect to SQLite DB ===
@@ -75,31 +73,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def gen_frames(camera_id: int):
-    camera_folder = os.path.join(BASE_IMAGE_DIR, f"C{camera_id}")
-    if not os.path.isdir(camera_folder):
-        raise FileNotFoundError(f"Directory for camera {camera_id} not found.")
-
-    image_files = [f for f in os.listdir(camera_folder) if f.endswith('.png')]
-    image_files = natsorted(image_files)
-
-    for filename in image_files:
-        frame_path = os.path.join(camera_folder, filename)
-        frame = cv2.imread(frame_path)
-        if frame is None:
-            continue
-
-        _, buffer = cv2.imencode('.jpg', frame)
-        yield (
-            b'--frame\r\n'
-            b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n'
-        )
 
 @app.get("/video/{camera_id}")
 def video(camera_id: int = Path(..., ge=1, le=6)):
     try:
         return StreamingResponse(
-            gen_frames(camera_id),
+            streams[camera_id - 1],
             media_type="multipart/x-mixed-replace; boundary=frame"
         )
     except FileNotFoundError as e:
