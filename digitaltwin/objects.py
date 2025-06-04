@@ -72,6 +72,32 @@ class Camera:
         return self.intrinsic_matrix[:2, 2]
 
 
+    def project_2d(self, u: float, v: float) -> tuple[float, float]:
+        """
+        Projects 2D image coordinates (u, v) to world (x, y) assuming z=0 ground plane.
+        Returns (x, y) in world coordinates.
+        """
+        # Inverse intrinsic
+        K_inv = np.linalg.inv(self.intrinsic_matrix)
+
+        # Image point in homogeneous coords
+        uv1 = np.array([u, v, 1.0])
+
+        # Ray in camera coordinates
+        ray_camera = K_inv @ uv1  # shape (3,)
+
+        # Transform ray into world coordinates
+        ray_world = self.R_matrix.T @ ray_camera
+        cam_origin_world = -self.R_matrix.T @ self.t_vector.reshape(3)
+
+        # Line: origin + s * direction
+        # Intersect with z=0 plane in world frame
+        s = -cam_origin_world[2] / ray_world[2]
+        world_point = cam_origin_world + s * ray_world
+
+        return float(world_point[0]), float(world_point[1])
+
+
     def to_json(self, file_name: str) -> None:
         """ Serialize to JSON """
         if os.path.sep in file_name:

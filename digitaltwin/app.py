@@ -25,11 +25,10 @@ model = YOLO("models/yolo11n.pt")
 
 # What streams should we use
 streams = [
-    YOLOStreamer(CameraStreamer(cam_id = 1), model=model),
-    YOLOStreamer(DirectoryStreamer(images_dir=os.path.join(BASE_IMAGE_DIR, "C1")), model=model),
-    YOLOStreamer(DirectoryStreamer(images_dir=os.path.join(BASE_IMAGE_DIR, "C2")), model=model),
-    YOLOStreamer(VideoStreamer(video_path = "data/raw/Camera.mp4"), model=model),
-    # DirectoryStreamer(images_dir=os.path.join(BASE_IMAGE_DIR, "C3")),
+    YOLOStreamer(CameraStreamer(id=0, cam_id = 1), model=model),
+    YOLOStreamer(DirectoryStreamer(id=1,images_dir=os.path.join(BASE_IMAGE_DIR, "C1")), model=model),
+    YOLOStreamer(DirectoryStreamer(id=2,images_dir=os.path.join(BASE_IMAGE_DIR, "C2")), model=model),
+    YOLOStreamer(VideoStreamer(id=3,video_path = "data/raw/Camera.mp4"), model=model),
 ]
 
 logger = DatabaseLogger("data/tracking.db")
@@ -45,24 +44,6 @@ db = SQLDatabase.from_uri(
     "sqlite:///data/tracking.db",
     include_tables=["people_tracks", "positions"],
     sample_rows_in_table_info=2,
-    # custom_table_info={
-    #     "people_tracks": (
-    #         "Table `people_tracks` tracks each unique person detected in the scene. "
-    #         "Columns:\n"
-    #         "- id: unique ID of the person\n"
-    #         "- first_seen: timestamp of first detection\n"
-    #         "- last_seen: timestamp of last detection"
-    #     ),
-    #     "positions": (
-    #         "Table `positions` stores timestamped (x, y) coordinates of each person. "
-    #         "Columns:\n"
-    #         "- id: unique position ID\n"
-    #         "- track_id: foreign key to people_tracks.id\n"
-    #         "- timestamp: time of observation\n"
-    #         "- x: x-coordinate\n"
-    #         "- y: y-coordinate"
-    #     )
-    # }
 )
 print(f"Agent context: {db.table_info}")
 

@@ -1,19 +1,24 @@
+import os
 import threading
 import sqlite3
 
 from dataclasses import dataclass
 from datetime import datetime
+from digitaltwin.database.make_db import make_db
 
 
 @dataclass
 class DetectionEvent:
-    # camera_id: int
+    camera_id: int 
     frame_index: int
+    size: float
     timestamp: datetime
-    track_id: int
+    track_id: int # person
+    u: float
+    v: float
     x: float
     y: float
-
+    zone_id: int = -1
 
 class EventListener:
     def handle_detection(self, event: DetectionEvent):
@@ -23,6 +28,9 @@ class EventListener:
 class DatabaseLogger(EventListener):
     def __init__(self, db_path: str):
         self.db_path = db_path
+        if not os.path.exists(self.db_path):
+            print("Not SQL database found, making one")
+            make_db(db_path)
         self.track_seen = set()
         self._local = threading.local()
 
@@ -46,9 +54,8 @@ class DatabaseLogger(EventListener):
             ''', (event.timestamp, event.track_id))
 
         cursor.execute('''
-            INSERT INTO positions (track_id, timestamp, x, y)
-            VALUES (?, ?, ?, ?)
-        ''', (event.track_id, event.timestamp, event.x, event.y))
+            INSERT INTO positions (track_id, timestamp, camera_id, u, v, x, y, zone_id, size)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (event.track_id, event.timestamp, event.camera_id, event.u, event.v, event.x, event.y, event.zone_id, event.size))
 
-        print("logged")
         conn.commit()

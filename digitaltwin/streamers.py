@@ -6,9 +6,13 @@ import cv2
 from natsort import natsorted
 
 from digitaltwin.database.db_logger import EventListener, DetectionEvent
+from digitaltwin.objects import Camera
 
 
 class Streamer(ABC):
+
+    def __init__(self, id: int):
+        self.id = id
 
     @abstractmethod
     def __iter__(self):
@@ -21,7 +25,8 @@ class Streamer(ABC):
 
 class CameraStreamer(Streamer):
     
-    def __init__(self, cam_id: int = 0):
+    def __init__(self, id: int, cam_id: int = 0):
+        super().__init__(id=id)
         self.cam_id = cam_id
         self.cap = cv2.VideoCapture(cam_id)
 
@@ -40,8 +45,8 @@ class CameraStreamer(Streamer):
 
 class DirectoryStreamer(Streamer):
 
-    def __init__(self, images_dir: str) -> None:
-        super().__init__()
+    def __init__(self, id: int, images_dir: str) -> None:
+        super().__init__(id=id)
         if not os.path.isdir(images_dir):
             raise FileNotFoundError(f"Directory for camera not found: {images_dir}")
         
@@ -70,8 +75,8 @@ class DirectoryStreamer(Streamer):
 
 class VideoStreamer(Streamer):
 
-    def __init__(self, video_path: str) -> None:
-        super().__init__()
+    def __init__(self, id: int, video_path: str) -> None:
+        super().__init__(id=id)
         if not os.path.isfile(video_path):
             raise FileNotFoundError(f"Video file not found: {video_path}")
 
@@ -100,9 +105,11 @@ class VideoStreamer(Streamer):
 
 
 class YOLOStreamer(Streamer):
-    def __init__(self, base_streamer: Streamer, model, conf: float = 0.3, tracker: str = "botsort.yaml"):
+    def __init__(self, base_streamer: Streamer, model, camera: Camera = None, conf: float = 0.3, tracker: str = "botsort.yaml"):
+        super().__init__(id=base_streamer.id)
         self.base_streamer = base_streamer
         self.model = model
+        self.camera = camera
         self.conf = conf
         self.tracker = tracker
         self.listeners: list[EventListener] = []
@@ -127,7 +134,11 @@ class YOLOStreamer(Streamer):
         frame = next(self.frame_iter)
 
         ts = datetime.now()
-        results = self.model.track(frame, conf=self.conf, tracker=self.tracker, persist=False, stream=False, verbose=False)
+        results = self.model.track(
+            frame, 
+            conf=self.conf, tracker=self.tracker, 
+            persist=False, stream=False, verbose=False
+        )
 
         # Get annotated image from the results
         annotated_frame = results[0].plot()
@@ -137,12 +148,19 @@ class YOLOStreamer(Streamer):
                 x1, y1, x2, y2 = box.tolist()
                 cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
 
+                xy = self.camera.project_2d(cx,cy) if self.camera is not None else (0.0, 0.0)
+
                 event = DetectionEvent(
+                    camera_id=self.id,
                     frame_index=self.frame_idx,
                     timestamp=ts,
                     track_id=int(track_id),
-                    x=cx,
-                    y=cy
+                    u=cx,
+                    v=cy,
+                    x=xy[0],
+                    y=xy[1],
+                    zone_id=-1,
+                    size=float((x2 - x1) * (y2 - y1)),
                 )
                 self.notify_listeners(event)
 
