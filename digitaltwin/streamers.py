@@ -1,7 +1,8 @@
 import os
 import io
 import time
-from datetime import datetime
+import sqlite3
+from datetime import datetime, timedelta, UTC
 from abc import ABC, abstractmethod
 
 import cv2
@@ -56,7 +57,7 @@ class DirectoryStreamer(Streamer):
         if not os.path.isdir(images_dir):
             raise FileNotFoundError(f"Directory for camera not found: {images_dir}")
         
-        image_files = [f for f in os.listdir(images_dir) if f.endswith('.png')]
+        image_files = [f for f in os.listdir(images_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
         self.image_paths: list[str] = natsorted([os.path.join(images_dir, f) for f in image_files])
         self.index = 0
 
@@ -110,11 +111,11 @@ class VideoStreamer(Streamer):
             self.cap.release()
 
 
-
-class PlotStreamer(Streamer):
-    def __init__(self, id: int, interval_sec: float = 1.0):
+class HeatmapStreamer(Streamer):
+    def __init__(self, id: int, db_path: str, interval_sec: float = 1.0):
         self.id = id
         self.interval_sec = interval_sec
+        self.db_path = db_path
         self.last_update = 0
         self.cached_frame = None  # store last generated frame
 
@@ -128,27 +129,47 @@ class PlotStreamer(Streamer):
             self.cached_frame = self._generate_plot_frame()
         return self.cached_frame
 
+
     def _generate_plot_frame(self):
-        x = np.random.rand(10)
-        y = np.random.rand(10)
+        # Connect to DB and query positions from last N seconds
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        ts_cutoff = datetime.now(UTC) - timedelta(seconds=60)
+        cursor.execute("""
+            SELECT u, v FROM positions
+            WHERE camera_id = ? AND timestamp >= ?
+        """, (0, ts_cutoff, ))
+        # camera_id = ? AND timestamp >= ?
+        data = cursor.fetchall()
+        conn.close()
+
+        if not data:
+            x, y = np.array([]), np.array([])
+        else:
+            x, y = zip(*data)
+            x, y = np.array(x), np.array(y)
 
         fig, ax = plt.subplots(figsize=(6.4, 3.6)) # 16/9 aspect 
-        ax.scatter(x, y)
-        ax.set_xlim(0, 1)
-        ax.set_ylim(0, 1)
-        ax.set_title(f"Stream {self.id}")
 
+        if len(x) > 0:
+            hb = ax.hexbin(x, y, gridsize=30, cmap='inferno', extent=(0, 1920, 0, 1080))
+            fig.colorbar(hb, ax=ax)
+        else:
+            ax.text(0.5, 0.5, "No data", ha='center', va='center', fontsize=12)
+        
+        ax.set_title("Heatmap of Positions")
+
+        # Convert to image
         buf = io.BytesIO()
         fig.savefig(buf, format='jpg')
         buf.seek(0)
         plt.close(fig)
 
-        # Decode to OpenCV frame
         nparr = np.frombuffer(buf.read(), np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
         return frame
-
 
 
 class YOLOStreamer(Streamer):

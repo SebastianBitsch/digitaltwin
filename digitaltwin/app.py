@@ -13,26 +13,37 @@ from fastapi.staticfiles import StaticFiles
 
 from ultralytics import YOLO
 
-from digitaltwin.streamers import CameraStreamer, DirectoryStreamer, VideoStreamer, YOLOStreamer, PlotStreamer
+from digitaltwin.streamers import CameraStreamer, DirectoryStreamer, VideoStreamer, YOLOStreamer, HeatmapStreamer
 from digitaltwin.pydantic import QuestionRequest, QuestionResponse, ErrorResponse
 from digitaltwin.utils import to_bytes
 from digitaltwin.database.db_logger import DatabaseLogger
 
+DB_PATH = "data/tracking.db"
 BASE_IMAGE_DIR = "data/processed/Wildtrack_dataset/Image_subsets"
 FRAME_INTERVAL = 1.0 / 20.0  # ~20 FPS
 
 model = YOLO("models/yolo11n.pt")
 
 # What streams should we use
+# streams = [
+#     YOLOStreamer(CameraStreamer(id=0, cam_id = 1), model=model),
+#     YOLOStreamer(DirectoryStreamer(id=1,images_dir=os.path.join(BASE_IMAGE_DIR, "C1")), model=model),
+#     # YOLOStreamer(DirectoryStreamer(id=2,images_dir=os.path.join(BASE_IMAGE_DIR, "C2")), model=model),
+#     PlotStreamer(id=2),
+#     YOLOStreamer(VideoStreamer(id=3,video_path = "data/raw/Camera.mp4"), model=model),
+# ]
+
+# CCTV example
+BASE_IMAGE_DIR = "data/processed/EPFL-RLC_dataset/frames"
 streams = [
-    YOLOStreamer(CameraStreamer(id=0, cam_id = 1), model=model),
-    YOLOStreamer(DirectoryStreamer(id=1,images_dir=os.path.join(BASE_IMAGE_DIR, "C1")), model=model),
-    # YOLOStreamer(DirectoryStreamer(id=2,images_dir=os.path.join(BASE_IMAGE_DIR, "C2")), model=model),
-    PlotStreamer(id=2),
-    YOLOStreamer(VideoStreamer(id=3,video_path = "data/raw/Camera.mp4"), model=model),
+    YOLOStreamer(DirectoryStreamer(id=0,images_dir=os.path.join(BASE_IMAGE_DIR, "cam0")), model=model),
+    YOLOStreamer(DirectoryStreamer(id=1,images_dir=os.path.join(BASE_IMAGE_DIR, "cam1")), model=model),
+    YOLOStreamer(DirectoryStreamer(id=2,images_dir=os.path.join(BASE_IMAGE_DIR, "cam2")), model=model),
+    HeatmapStreamer(id=3, db_path = DB_PATH),
 ]
 
-logger = DatabaseLogger("data/tracking.db")
+
+logger = DatabaseLogger(DB_PATH)
 
 # Only some streamers want to log data
 for s in streams:
