@@ -11,6 +11,7 @@ matplotlib.use('Agg') # mac bullshit
 import matplotlib.pyplot as plt
 import numpy as np
 from natsort import natsorted
+# from ultralytics import solutions
 
 from digitaltwin.database.db_logger import EventListener, DetectionEvent
 from digitaltwin.objects import Camera
@@ -47,6 +48,7 @@ class CameraStreamer(Streamer):
             return frame
 
         else:
+            print("Frame failed")
             raise StopIteration
 
 
@@ -112,8 +114,9 @@ class VideoStreamer(Streamer):
 
 
 class HeatmapStreamer(Streamer):
-    def __init__(self, id: int, db_path: str, interval_sec: float = 1.0):
+    def __init__(self, id: int, db_path: str, im_size, interval_sec: float = 1.0):
         self.id = id
+        self.im_size = im_size
         self.interval_sec = interval_sec
         self.db_path = db_path
         self.last_update = 0
@@ -135,12 +138,11 @@ class HeatmapStreamer(Streamer):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
-        ts_cutoff = datetime.now(UTC) - timedelta(seconds=60)
+        ts_cutoff = datetime.now(UTC) - timedelta(seconds=30) # todo
         cursor.execute("""
             SELECT u, v FROM positions
             WHERE camera_id = ? AND timestamp >= ?
         """, (0, ts_cutoff, ))
-        # camera_id = ? AND timestamp >= ?
         data = cursor.fetchall()
         conn.close()
 
@@ -153,12 +155,15 @@ class HeatmapStreamer(Streamer):
         fig, ax = plt.subplots(figsize=(6.4, 3.6)) # 16/9 aspect 
 
         if len(x) > 0:
-            hb = ax.hexbin(x, y, gridsize=30, cmap='inferno', extent=(0, 1920, 0, 1080))
-            fig.colorbar(hb, ax=ax)
+            ax.scatter(x,y)
+            # hb = ax.hexbin(x, y, gridsize=30, cmap='inferno', extent=(0, 1920, 0, 1080))
+            # fig.colorbar(hb, ax=ax)
         else:
             ax.text(0.5, 0.5, "No data", ha='center', va='center', fontsize=12)
         
-        ax.set_title("Heatmap of Positions")
+        ax.set_title("Heatmap of Positions in imagespace from Camera 1")
+        ax.set_xlim(0, self.im_size[0])
+        ax.set_ylim(self.im_size[1], 0)
 
         # Convert to image
         buf = io.BytesIO()
@@ -173,7 +178,7 @@ class HeatmapStreamer(Streamer):
 
 
 class YOLOStreamer(Streamer):
-    def __init__(self, base_streamer: Streamer, model, camera: Camera = None, conf: float = 0.3, tracker: str = "botsort.yaml"):
+    def __init__(self, base_streamer: Streamer, model, camera: Camera = None, zones: list = None, conf: float = 0.3, tracker: str = "botsort.yaml"):
         super().__init__(id=base_streamer.id)
         self.base_streamer = base_streamer
         self.model = model
@@ -182,6 +187,18 @@ class YOLOStreamer(Streamer):
         self.tracker = tracker
         self.listeners: list[EventListener] = []
         self.frame_idx = 0
+        # if zones is not None:
+        #     self.zones = [
+        #         solutions.TrackZone(
+        #             show = False,
+        #             region = z,
+        #             model = "models/yolo11n.pt" # TODO
+        #         )
+        #         for z in zones
+        #     ]
+        #     print("ZEONES", self.zones)
+        # else:
+        #     self.zones = None
 
 
     def add_listener(self, listener: EventListener):
@@ -205,14 +222,25 @@ class YOLOStreamer(Streamer):
         results = self.model.track(
             frame, 
             conf=self.conf, tracker=self.tracker, 
-            persist=False, stream=False, verbose=False
+            persist=False, stream=False, verbose=False,
+            classes=[0] # people
         )
+        # zone_finds = {}
+        # # shit code sorry
+        # if self.zones is not None:
+        #     for zone_id, zone in enumerate(self.zones):
+        #         zone_results = zone(frame)
+        #         print("res", zone_results)
+        #         if zone.trackzone.track_ids:
+        #             for r in zone_results:
+        #                 print("r", r, zone_id)
+        #                 zone_finds[r] = zone_id
 
         # Get annotated image from the results
         annotated_frame = results[0].plot()
 
         if results[0].boxes.id is not None:
-            for box, track_id in zip(results[0].boxes.xyxy, results[0].boxes.id):
+            for i, (box, track_id) in enumerate(zip(results[0].boxes.xyxy, results[0].boxes.id)):
                 x1, y1, x2, y2 = box.tolist()
                 cx, cy = (x1 + x2) / 2, (y1 + y2) / 2
 
@@ -227,7 +255,7 @@ class YOLOStreamer(Streamer):
                     v=cy,
                     x=xy[0],
                     y=xy[1],
-                    zone_id=-1,
+                    zone_id=-1, # zone_finds.get(i, -1), # sorry
                     size=float((x2 - x1) * (y2 - y1)),
                 )
                 self.notify_listeners(event)

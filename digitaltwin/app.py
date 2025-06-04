@@ -17,38 +17,56 @@ from digitaltwin.streamers import CameraStreamer, DirectoryStreamer, VideoStream
 from digitaltwin.pydantic import QuestionRequest, QuestionResponse, ErrorResponse
 from digitaltwin.utils import to_bytes
 from digitaltwin.database.db_logger import DatabaseLogger
+from digitaltwin.objects import Camera
 
+CLEAR_DB = True
 DB_PATH = "data/tracking.db"
+
+if CLEAR_DB and os.path.exists(DB_PATH):
+    print("Cleared DB")
+    os.remove(DB_PATH)
+
 BASE_IMAGE_DIR = "data/processed/Wildtrack_dataset/Image_subsets"
 FRAME_INTERVAL = 1.0 / 20.0  # ~20 FPS
 
-model = YOLO("models/yolo11n.pt")
+model = YOLO("models/yolo11m.pt")
+logger = DatabaseLogger(DB_PATH)
 
-# What streams should we use
-# streams = [
-#     YOLOStreamer(CameraStreamer(id=0, cam_id = 1), model=model),
-#     YOLOStreamer(DirectoryStreamer(id=1,images_dir=os.path.join(BASE_IMAGE_DIR, "C1")), model=model),
-#     # YOLOStreamer(DirectoryStreamer(id=2,images_dir=os.path.join(BASE_IMAGE_DIR, "C2")), model=model),
-#     PlotStreamer(id=2),
-#     YOLOStreamer(VideoStreamer(id=3,video_path = "data/raw/Camera.mp4"), model=model),
-# ]
-
-# CCTV example
-BASE_IMAGE_DIR = "data/processed/EPFL-RLC_dataset/frames"
+# Live demo
 streams = [
-    YOLOStreamer(DirectoryStreamer(id=0,images_dir=os.path.join(BASE_IMAGE_DIR, "cam0")), model=model),
-    YOLOStreamer(DirectoryStreamer(id=1,images_dir=os.path.join(BASE_IMAGE_DIR, "cam1")), model=model),
-    YOLOStreamer(DirectoryStreamer(id=2,images_dir=os.path.join(BASE_IMAGE_DIR, "cam2")), model=model),
-    HeatmapStreamer(id=3, db_path = DB_PATH),
+    YOLOStreamer(CameraStreamer(id=0, cam_id=4), model=model, 
+        zones=[[(150,150), (1130,150), (1130, 570), (150, 570)]],
+        camera=Camera.from_json("data/ps3eye.json")
+    ),
+    # YOLOStreamer(CameraStreamer(id=1, cam_id=0), model=model),
+    HeatmapStreamer(id=1, db_path = DB_PATH, im_size=(640, 480)),
 ]
 
+# warehouse
+# BASE_IMAGE_DIR = "data/processed/warehouse"
+# streams = [
+#     YOLOStreamer(VideoStreamer(id=0, video_path=os.path.join(BASE_IMAGE_DIR, "Camera_0000.mp4")), model=model),
+#     YOLOStreamer(VideoStreamer(id=1, video_path=os.path.join(BASE_IMAGE_DIR, "Camera_0001.mp4")), model=model),
+#     YOLOStreamer(VideoStreamer(id=2, video_path=os.path.join(BASE_IMAGE_DIR, "Camera_0002.mp4")), model=model),
+#     HeatmapStreamer(id=1, db_path = DB_PATH, im_size=(1920, 1280)),
+# ]
 
-logger = DatabaseLogger(DB_PATH)
+# zurich
+# BASE_IMAGE_DIR = "data/processed/EPFL-RLC_dataset/frames"
+# streams = [
+#     YOLOStreamer(DirectoryStreamer(id=0,images_dir=os.path.join(BASE_IMAGE_DIR, "cam0")), model=model),
+#     YOLOStreamer(DirectoryStreamer(id=1,images_dir=os.path.join(BASE_IMAGE_DIR, "cam1")), model=model),
+#     YOLOStreamer(DirectoryStreamer(id=2,images_dir=os.path.join(BASE_IMAGE_DIR, "cam2")), model=model),
+#     HeatmapStreamer(id=3, db_path = DB_PATH, im_size = (480, 270)),
+# ]
+
+
 
 # Only some streamers want to log data
 for s in streams:
     if getattr(s, "add_listener", None) is None:
         continue
+    print("adding listener")
     s.add_listener(logger)
 
 
