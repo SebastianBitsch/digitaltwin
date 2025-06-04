@@ -1,8 +1,14 @@
 import os
+import io
+import time
 from datetime import datetime
 from abc import ABC, abstractmethod
 
 import cv2
+import matplotlib
+matplotlib.use('Agg') # mac bullshit
+import matplotlib.pyplot as plt
+import numpy as np
 from natsort import natsorted
 
 from digitaltwin.database.db_logger import EventListener, DetectionEvent
@@ -102,6 +108,47 @@ class VideoStreamer(Streamer):
     def __del__(self):
         if hasattr(self, 'cap') and self.cap.isOpened():
             self.cap.release()
+
+
+
+class PlotStreamer(Streamer):
+    def __init__(self, id: int, interval_sec: float = 1.0):
+        self.id = id
+        self.interval_sec = interval_sec
+        self.last_update = 0
+        self.cached_frame = None  # store last generated frame
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        now = time.time()
+        if self.cached_frame is None or (now - self.last_update) >= self.interval_sec:
+            self.last_update = now
+            self.cached_frame = self._generate_plot_frame()
+        return self.cached_frame
+
+    def _generate_plot_frame(self):
+        x = np.random.rand(10)
+        y = np.random.rand(10)
+
+        fig, ax = plt.subplots(figsize=(6.4, 3.6)) # 16/9 aspect 
+        ax.scatter(x, y)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_title(f"Stream {self.id}")
+
+        buf = io.BytesIO()
+        fig.savefig(buf, format='jpg')
+        buf.seek(0)
+        plt.close(fig)
+
+        # Decode to OpenCV frame
+        nparr = np.frombuffer(buf.read(), np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+
+        return frame
+
 
 
 class YOLOStreamer(Streamer):

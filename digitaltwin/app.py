@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from ultralytics import YOLO
 
-from digitaltwin.streamers import CameraStreamer, DirectoryStreamer, VideoStreamer, YOLOStreamer
+from digitaltwin.streamers import CameraStreamer, DirectoryStreamer, VideoStreamer, YOLOStreamer, PlotStreamer
 from digitaltwin.pydantic import QuestionRequest, QuestionResponse, ErrorResponse
 from digitaltwin.utils import to_bytes
 from digitaltwin.database.db_logger import DatabaseLogger
@@ -27,14 +27,19 @@ model = YOLO("models/yolo11n.pt")
 streams = [
     YOLOStreamer(CameraStreamer(id=0, cam_id = 1), model=model),
     YOLOStreamer(DirectoryStreamer(id=1,images_dir=os.path.join(BASE_IMAGE_DIR, "C1")), model=model),
-    YOLOStreamer(DirectoryStreamer(id=2,images_dir=os.path.join(BASE_IMAGE_DIR, "C2")), model=model),
+    # YOLOStreamer(DirectoryStreamer(id=2,images_dir=os.path.join(BASE_IMAGE_DIR, "C2")), model=model),
+    PlotStreamer(id=2),
     YOLOStreamer(VideoStreamer(id=3,video_path = "data/raw/Camera.mp4"), model=model),
 ]
 
 logger = DatabaseLogger("data/tracking.db")
 
+# Only some streamers want to log data
 for s in streams:
+    if getattr(s, "add_listener", None) is None:
+        continue
     s.add_listener(logger)
+
 
 assert len(streams) <= 4, "Error: for now only 4 streams - dont wanna do dynamic html shit"
 
