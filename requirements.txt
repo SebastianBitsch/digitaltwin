@@ -6,3 +6,6 @@ langchain-openai
 supervision
 ultralytics
 flask
+uvicorn
+fastapi
+natsort
