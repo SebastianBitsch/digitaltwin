@@ -1,5 +1,6 @@
 docs/site/
 logs/
+*.pt
 
 # Ignore top level models and data dirs but keep the ones in the src dir
 /models/
